@@ -1,0 +1,63 @@
+---
+# Create our individual Namespace.
+# The label is here just to give us an easy way to find all
+# the Namespaces created by nsplease.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $NAMESPACE
+  labels:
+    nsplease.container.training/thank-you: ""
+---
+# Create the "admin" ServiceAccount for that Namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: $NAMESPACE
+  name: admin
+---
+# Give "admin" privileges to that "admin" ServiceAccount.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: $NAMESPACE
+  name: admin-clusterrole
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+- kind: ServiceAccount
+  namespace: $NAMESPACE
+  name: admin
+---
+# Create a role that can delete the Namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: $NAMESPACE
+  name: admin
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - $NAMESPACE
+  resources:
+  - namespaces
+  verbs:
+  - delete
+---
+# Allow the "admin" ServiceAccount to delete the Namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: $NAMESPACE
+  name: admin-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: admin
+subjects:
+- kind: ServiceAccount
+  namespace: $NAMESPACE
+  name: admin
