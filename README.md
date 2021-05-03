@@ -18,20 +18,52 @@ Kubernetes cluster anymore.
 
 `nsplease` uses two namespaces.
 
-A "system" namespace (default value: `nsplease-system`) in which
-it is running; this namespace holds `nsplease` code and configuration.
+1. `nsplease-system`: that's where the operator itself is running.
+2. `nsplease-requests`: that namespace only holds ConfigMaps and Secrets.
+   The ConfigMaps correspond to "requests" (meaning "I want you to create
+   a new Namespace") and the secrets correspond to "responses" (they
+   hold the credentials to access created namespaces).
 
-A "requests" namespace (default value: `nsplease-requests`) which
-holds ConfigMap (representing namespaces to be created) and Secrets
-(holding the credentials to access created namespaces).
+This is the general flow of operation.
+
+- User wants to create a new Namespace named `hello`.
+- User creates a ConfigMap named `hello` in Namespace `nsplease-requests`.
+- User waits until a Secret named `hello` shows up in Namespace `nsplease-requests`.
+- `nsplease` sees the ConfigMap named `hello` in Namespace `nsplease-requests`.
+- `nsplease` validates the name of the ConfigMap.
+- `nsplease` creates the Namespace `hello`.
+- `nsplease` creates a ServiceAccount named `admin` in Namespace `hello`.
+- `nsplease` grants the `admin` ClusterRole to ServiceAccount `admin` in Namespace `hello`.
+- `nsplease` can optionally prepopulate Namespace `hello` with other resources.
+- `nsplease` retrieves the token for ServiceACccount `admin` in Namespace `hello`.
+- `nsplease` creates a Secret named `hello` in Namespace `nsplease-requests`,
+  containing the token.
+- User detects the Secret and obtains the token.
+- User can now work in the `hello` namespace by using the token.
+- When User doesn't need the Namespace anymore, they delete the `hello` Namespace.
+- The ConfigMap and Secret (in `nsplease-requests`) get deleted automatically.
 
 
 ## Installing
 
-FIXME
+The repository provides a Kubernetes YAML manifest that will run
+`nsplease` and grant it the privileges that it needs to create further
+Namespaces.
+
+You can install it like this:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/jpetazzo/nsplease/main/nsplease.yaml
+```
+
+You can remove it similarly with `kubectl delete -f`.
+
+If you remove `nsplease`, the Namespaces that it created won't be removed.
+If you want to remove all these namespaces, they are labelled, so you can
+easily identify them with a selector. No other object is created.
 
 
-## Basic usage
+## Requesting a Namespace
 
 Let's say that you have a CI job that needs to deploy a staging copy
 of your application in a dedicated namespace.
@@ -76,11 +108,17 @@ The token that you obtained is the token of the ServiceAccount
 in the namespace `ci-projectfoo-pr123`.
 
 
-## Cleaning up
+## Cleaning up a Namespace
 
-The `admin` ServiceAccount can delete its own Namespace. When the
-Namespace is deleted, the ConfigMap and the Secret (in the `nsplease-requests`
-Namespace) are automatically deleted as well.
+In each Namespace created by `nsplease`, there is a ServiceAccount named
+`admin`. That ServiceAccount has the right to delete the Namespace.
+Of course, deleting the Namespace will probably be the last operation
+that the ServiceAccount will do, since deleting the Namespace will
+eventually delete the ServiceAccount as well.
+
+The ConfigMap and Secret corresponding to the Namespace (in the `nsplease-requests`
+Namespace) get automatically deleted when the Namespace is deleted
+(thanks to `ownerReferences`).
 
 
 ## Security model
