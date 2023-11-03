@@ -88,19 +88,6 @@ main() {
             warn "Something bad happened when creating or updating the resources."
             continue
           }
-        debug "Waiting for ServiceAccount token to be available."
-        TOKEN_NAME=""
-        TIMEOUT=$((30 + $(date +%s)))
-        while [ "$(date +%s)" -lt "$TIMEOUT" ]; do
-          TOKEN_NAME=$(kubectl --namespace $NAMESPACE get serviceaccount admin \
-            -o "jsonpath={.secrets[0].name}") \
-            && break
-          sleep 1
-        done
-        if [ "$TOKEN_NAME" = "" ]; then
-          warn "Timeout while trying to retrieve token name for ServiceAccount."
-          continue
-        fi
 
         JSONPATH="{.metadata.annotations.$(echo $TOKEN_POLICY_ANNOTATION | sed "s/\./\\\./"g)}"
         ANNOTATION=$(kubectl --namespace $NAMESPACE get serviceaccount admin \
@@ -126,9 +113,10 @@ main() {
             ;;
         esac
 
-        info "Copying ServiceAccount token from $NAMESPACE to $REQUESTS_NAMESPACE."
-        TOKEN=$(kubectl --namespace $NAMESPACE get secrets $TOKEN_NAME \
-          -o json | jq -r ".data.token | @base64d")
+        info "Generating ServiceAccount token."
+        TOKEN=$(kubectl create token --namespace $NAMESPACE admin)
+
+        info "Storing token for $NAMESPACE to $REQUESTS_NAMESPACE."
         kubectl create secret generic $NAMESPACE --from-literal=token=$TOKEN \
           --dry-run=client -o yaml \
           | out kubectl --namespace $REQUESTS_NAMESPACE apply -f-
